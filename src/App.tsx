@@ -35,6 +35,7 @@ import {
   addRoute,
   updateRoute,
   deleteRoute,
+  deleteAllRoutes,
   addDriver,
   updateDriver,
   deleteDriver,
@@ -145,6 +146,15 @@ export default function App() {
       showToast('Rota excluída com sucesso.');
     } catch (err: any) {
       showToast('Erro ao excluir rota.');
+    }
+  };
+
+  const handleDeleteAllRoutes = async () => {
+    try {
+      const count = await deleteAllRoutes();
+      showToast(`${count} rotas excluídas com sucesso. O banco de dados está limpo!`);
+    } catch (err: any) {
+      showToast('Erro ao excluir rotas.');
     }
   };
 
@@ -314,6 +324,7 @@ export default function App() {
                   setRouteModalOpen(true);
                 }}
                 onDeleteRoute={handleDeleteRoute}
+                onDeleteAllRoutes={handleDeleteAllRoutes}
               />
             )}
           </>

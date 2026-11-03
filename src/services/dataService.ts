@@ -6,6 +6,8 @@ import {
   deleteDoc,
   updateDoc,
   getDocs,
+  getDoc,
+  writeBatch,
   query,
   orderBy,
 } from 'firebase/firestore';
@@ -137,13 +139,50 @@ export async function deleteDriver(id: string): Promise<void> {
   }
 }
 
-// Initial realistic seed if collection is brand new
+export async function deleteAllRoutes(): Promise<number> {
+  try {
+    const snap = await getDocs(collection(db, ROUTES_COLLECTION));
+    const count = snap.size;
+    if (count === 0) return 0;
+    const batch = writeBatch(db);
+    snap.docs.forEach((d) => {
+      batch.delete(d.ref);
+    });
+    await batch.commit();
+    return count;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, ROUTES_COLLECTION);
+    throw error;
+  }
+}
+
+// Initial realistic seed only once per system lifetime
 export async function seedInitialDataIfEmpty(): Promise<boolean> {
   try {
+    // 1. Check local browser storage marker
+    if (typeof window !== 'undefined' && localStorage.getItem('gls_system_seeded') === 'true') {
+      return false;
+    }
+
+    // 2. Check persistent flag in Firestore settings collection
+    const initRef = doc(db, 'settings', 'system_init');
+    const initSnap = await getDoc(initRef);
+    if (initSnap.exists()) {
+      if (typeof window !== 'undefined') localStorage.setItem('gls_system_seeded', 'true');
+      return false; // Already initialized in Firestore! Never re-seed even if all routes were deleted.
+    }
+
+    // 3. Check if routes already exist in Firestore
     const existingRoutes = await getDocs(collection(db, ROUTES_COLLECTION));
     if (!existingRoutes.empty) {
-      return false; // already has data
+      await setDoc(initRef, { seeded: true, initializedAt: new Date().toISOString() });
+      if (typeof window !== 'undefined') localStorage.setItem('gls_system_seeded', 'true');
+      return false;
     }
+
+    // Mark as seeded BEFORE inserting documents
+    await setDoc(initRef, { seeded: true, initializedAt: new Date().toISOString() });
+    if (typeof window !== 'undefined') localStorage.setItem('gls_system_seeded', 'true');
 
     const defaultDrivers: Driver[] = [
       { id: 'drv_osc_1', provider: 'Oscar', name: 'Carlos Silva', phone: '(11) 98765-4321', status: 'active', vehicleType: 'Van Master', licensePlate: 'ABC-1234', createdAt: new Date().toISOString() },

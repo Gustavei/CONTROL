@@ -31,6 +31,7 @@ interface HistoryViewProps {
   isAdmin: boolean;
   onOpenRouteModal: (route?: RouteRecord) => void;
   onDeleteRoute: (routeId: string) => void;
+  onDeleteAllRoutes?: () => Promise<void>;
 }
 
 type PeriodPreset = 'all' | 'today' | 'yesterday' | 'week' | 'month' | 'last_month' | 'year' | 'custom';
@@ -43,8 +44,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   isAdmin,
   onOpenRouteModal,
   onDeleteRoute,
+  onDeleteAllRoutes,
 }) => {
   const [routeToDelete, setRouteToDelete] = useState<RouteRecord | null>(null);
+  const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -234,7 +237,17 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {isAdmin && routes.length > 0 && (
+              <button
+                onClick={() => setShowDeleteAllModal(true)}
+                className="flex items-center gap-1.5 bg-red-50 hover:bg-red-100 text-red-700 font-semibold text-xs px-3 py-1.5 rounded-lg border border-red-200 transition"
+                title="Excluir todas as rotas de uma vez"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Limpar Todas as Rotas
+              </button>
+            )}
             <button
               onClick={exportToCsv}
               className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs px-3 py-1.5 rounded-lg border border-slate-300 transition"
@@ -629,7 +642,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         )}
       </div>
 
-      {/* Confirmation Modal */}
+      {/* Single Route Confirmation Modal */}
       <ConfirmDeleteModal
         isOpen={routeToDelete !== null}
         title="Excluir Rota"
@@ -646,6 +659,21 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           }
         }}
         onCancel={() => setRouteToDelete(null)}
+      />
+
+      {/* Delete ALL Routes Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={showDeleteAllModal}
+        title="Excluir TODAS as Rotas"
+        message="Atenção: Esta ação removerá definitivamente TODAS as rotas do banco de dados na nuvem. A base ficará zerada e NUNCA mais será recarregada automaticamente."
+        itemName={`${routes.length} rotas serão excluídas permanentemente`}
+        onConfirm={async () => {
+          if (onDeleteAllRoutes) {
+            await onDeleteAllRoutes();
+            setShowDeleteAllModal(false);
+          }
+        }}
+        onCancel={() => setShowDeleteAllModal(false)}
       />
     </div>
   );
