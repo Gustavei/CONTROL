@@ -1,0 +1,68 @@
+{
+  "entities": {
+    "Route": {
+      "title": "Route",
+      "description": "Daily delivery route record with package volumes, incidences, and quality score",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "Date of route in YYYY-MM-DD format" },
+        "provider": { "type": "string", "enum": ["Oscar", "Tiago"], "description": "Contracted logistics provider" },
+        "driverId": { "type": "string", "maxLength": 100, "description": "Identifier of the driver assigned to route" },
+        "driverName": { "type": "string", "maxLength": 100, "description": "Name of the driver" },
+        "routeName": { "type": "string", "maxLength": 120, "description": "Descriptive route name" },
+        "routeNumber": { "type": "string", "maxLength": 50, "description": "Route identification code/number" },
+        "locality": { "type": "string", "maxLength": 100, "description": "City or territory sector" },
+        "volumes": { "type": "number", "description": "Total volumes loaded" },
+        "packages": { "type": "number", "description": "Total packages delivered" },
+        "incidences": { "type": "number", "description": "Total delivery incidences or failures" },
+        "quality": { "type": "number", "description": "Calculated quality percentage: ((packages - incidences) / packages) * 100" },
+        "notes": { "type": "string", "maxLength": 500, "description": "Optional observation or explanation" },
+        "createdAt": { "type": "string", "description": "Creation ISO timestamp" },
+        "updatedAt": { "type": "string", "description": "Last update ISO timestamp" }
+      },
+      "required": ["date", "provider", "driverName", "routeNumber", "locality", "volumes", "packages", "incidences", "quality"]
+    },
+    "Driver": {
+      "title": "Driver",
+      "description": "Registered driver under a specific provider",
+      "type": "object",
+      "properties": {
+        "provider": { "type": "string", "enum": ["Oscar", "Tiago"], "description": "Associated provider" },
+        "name": { "type": "string", "maxLength": 100, "description": "Driver full name" },
+        "phone": { "type": "string", "maxLength": 30, "description": "Driver contact telephone" },
+        "status": { "type": "string", "enum": ["active", "inactive"], "description": "Operational status" },
+        "vehicleType": { "type": "string", "maxLength": 50, "description": "Vehicle type/category" },
+        "licensePlate": { "type": "string", "maxLength": 20, "description": "Vehicle license plate" },
+        "createdAt": { "type": "string", "description": "Creation ISO timestamp" }
+      },
+      "required": ["provider", "name", "status"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "General system configuration and viewer access controls",
+      "type": "object",
+      "properties": {
+        "contractualQualityGoal": { "type": "number", "description": "Target quality percentage (94%)" },
+        "warningQualityThreshold": { "type": "number", "description": "Warning quality threshold percentage (90%)" },
+        "viewerAccessCode": { "type": "string", "maxLength": 100, "description": "Token/code for public viewer link" },
+        "adminEmail": { "type": "string", "maxLength": 100, "description": "Primary administrator email" },
+        "updatedAt": { "type": "string", "description": "Last update timestamp" }
+      },
+      "required": ["contractualQualityGoal", "warningQualityThreshold"]
+    }
+  },
+  "firestore": {
+    "/routes/{routeId}": {
+      "schema": "Route",
+      "description": "Collection of all daily delivery routes and quality records"
+    },
+    "/drivers/{driverId}": {
+      "schema": "Driver",
+      "description": "Collection of all registered drivers for Oscar and Tiago"
+    },
+    "/settings/{settingId}": {
+      "schema": "Settings",
+      "description": "System configuration parameters"
+    }
+  }
+}
