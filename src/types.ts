@@ -29,6 +29,68 @@ export interface Driver {
   createdAt: string;
 }
 
+export type FuelType = 'Diesel S10' | 'Gasolina Comum' | 'Gasolina Aditivada' | 'Etanol' | 'GNV' | 'Arla 32';
+
+export interface FuelLog {
+  id: string;
+  date: string; // YYYY-MM-DD
+  provider: ProviderName;
+  driverName: string;
+  vehiclePlate: string;
+  vehicleModel?: string;
+  odometerKm: number;
+  fuelType: FuelType;
+  liters: number;
+  pricePerLiter: number;
+  totalCost: number;
+  stationName?: string;
+  receiptNumber?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export type MaintenanceType = 'Preventiva' | 'Corretiva';
+export type MaintenanceStatus = 'Concluída' | 'Agendada' | 'Em Andamento';
+
+export interface MaintenanceLog {
+  id: string;
+  date: string; // YYYY-MM-DD
+  provider: ProviderName;
+  driverName?: string;
+  vehiclePlate: string;
+  vehicleModel?: string;
+  odometerKm: number;
+  type: MaintenanceType;
+  category: string; // ex: Óleo e Filtros, Freios, Pneus, Suspensão, Motor, Elétrica, etc.
+  description: string;
+  cost: number;
+  workshop: string;
+  invoiceNumber?: string;
+  nextMaintenanceKm?: number;
+  nextMaintenanceDate?: string;
+  status: MaintenanceStatus;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface MileageLog {
+  id: string;
+  date: string; // YYYY-MM-DD
+  provider: ProviderName;
+  driverName: string;
+  vehiclePlate: string;
+  vehicleModel?: string;
+  routeNumber?: string;
+  startKm: number;
+  endKm: number;
+  totalKm: number; // endKm - startKm
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export type QualityClassification = 'VERDE' | 'AMARELO' | 'VERMELHO';
 
 export interface QualityMetrics {

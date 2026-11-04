@@ -16,6 +16,21 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Fuel logs collection
+    match /fuel_logs/{logId} {
+      allow read, write: if true;
+    }
+
+    // Maintenance logs collection
+    match /maintenance_logs/{logId} {
+      allow read, write: if true;
+    }
+
+    // Mileage logs collection
+    match /mileage_logs/{logId} {
+      allow read, write: if true;
+    }
+
     // System Settings collection
     match /settings/{settingId} {
       allow read, write: if true;

@@ -12,10 +12,20 @@ import {
   orderBy,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase.ts';
-import { RouteRecord, Driver, calculateQuality } from '../types.ts';
+import {
+  RouteRecord,
+  Driver,
+  FuelLog,
+  MaintenanceLog,
+  MileageLog,
+  calculateQuality,
+} from '../types.ts';
 
 const ROUTES_COLLECTION = 'routes';
 const DRIVERS_COLLECTION = 'drivers';
+const FUEL_COLLECTION = 'fuel_logs';
+const MAINTENANCE_COLLECTION = 'maintenance_logs';
+const MILEAGE_COLLECTION = 'mileage_logs';
 
 export function subscribeRoutes(
   onData: (routes: RouteRecord[]) => void,
@@ -56,6 +66,72 @@ export function subscribeDrivers(
     (error) => {
       console.error('Error fetching drivers:', error);
       handleFirestoreError(error, OperationType.LIST, DRIVERS_COLLECTION);
+      if (onError) onError(error);
+    }
+  );
+}
+
+export function subscribeFuelLogs(
+  onData: (logs: FuelLog[]) => void,
+  onError?: (err: unknown) => void
+) {
+  const q = query(collection(db, FUEL_COLLECTION), orderBy('date', 'desc'));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const logs: FuelLog[] = [];
+      snapshot.forEach((doc) => {
+        logs.push({ id: doc.id, ...doc.data() } as FuelLog);
+      });
+      onData(logs);
+    },
+    (error) => {
+      console.error('Error fetching fuel logs:', error);
+      handleFirestoreError(error, OperationType.LIST, FUEL_COLLECTION);
+      if (onError) onError(error);
+    }
+  );
+}
+
+export function subscribeMaintenanceLogs(
+  onData: (logs: MaintenanceLog[]) => void,
+  onError?: (err: unknown) => void
+) {
+  const q = query(collection(db, MAINTENANCE_COLLECTION), orderBy('date', 'desc'));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const logs: MaintenanceLog[] = [];
+      snapshot.forEach((doc) => {
+        logs.push({ id: doc.id, ...doc.data() } as MaintenanceLog);
+      });
+      onData(logs);
+    },
+    (error) => {
+      console.error('Error fetching maintenance logs:', error);
+      handleFirestoreError(error, OperationType.LIST, MAINTENANCE_COLLECTION);
+      if (onError) onError(error);
+    }
+  );
+}
+
+export function subscribeMileageLogs(
+  onData: (logs: MileageLog[]) => void,
+  onError?: (err: unknown) => void
+) {
+  const q = query(collection(db, MILEAGE_COLLECTION), orderBy('date', 'desc'));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const logs: MileageLog[] = [];
+      snapshot.forEach((doc) => {
+        logs.push({ id: doc.id, ...doc.data() } as MileageLog);
+      });
+      onData(logs);
+    },
+    (error) => {
+      console.error('Error fetching mileage logs:', error);
+      handleFirestoreError(error, OperationType.LIST, MILEAGE_COLLECTION);
       if (onError) onError(error);
     }
   );
@@ -135,6 +211,128 @@ export async function deleteDriver(id: string): Promise<void> {
     await deleteDoc(doc(db, DRIVERS_COLLECTION, id));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `${DRIVERS_COLLECTION}/${id}`);
+    throw error;
+  }
+}
+
+// Fuel Logs CRUD
+export async function addFuelLog(log: Omit<FuelLog, 'id' | 'createdAt'>): Promise<string> {
+  const id = `fuel_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const newLog: FuelLog = {
+    ...log,
+    id,
+    createdAt: new Date().toISOString(),
+  };
+
+  try {
+    await setDoc(doc(db, FUEL_COLLECTION, id), newLog);
+    return id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, `${FUEL_COLLECTION}/${id}`);
+    throw error;
+  }
+}
+
+export async function updateFuelLog(id: string, updates: Partial<FuelLog>): Promise<void> {
+  try {
+    await updateDoc(doc(db, FUEL_COLLECTION, id), {
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `${FUEL_COLLECTION}/${id}`);
+    throw error;
+  }
+}
+
+export async function deleteFuelLog(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, FUEL_COLLECTION, id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `${FUEL_COLLECTION}/${id}`);
+    throw error;
+  }
+}
+
+// Maintenance Logs CRUD
+export async function addMaintenanceLog(log: Omit<MaintenanceLog, 'id' | 'createdAt'>): Promise<string> {
+  const id = `maint_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const newLog: MaintenanceLog = {
+    ...log,
+    id,
+    createdAt: new Date().toISOString(),
+  };
+
+  try {
+    await setDoc(doc(db, MAINTENANCE_COLLECTION, id), newLog);
+    return id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, `${MAINTENANCE_COLLECTION}/${id}`);
+    throw error;
+  }
+}
+
+export async function updateMaintenanceLog(id: string, updates: Partial<MaintenanceLog>): Promise<void> {
+  try {
+    await updateDoc(doc(db, MAINTENANCE_COLLECTION, id), {
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `${MAINTENANCE_COLLECTION}/${id}`);
+    throw error;
+  }
+}
+
+export async function deleteMaintenanceLog(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, MAINTENANCE_COLLECTION, id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `${MAINTENANCE_COLLECTION}/${id}`);
+    throw error;
+  }
+}
+
+// Mileage Logs CRUD
+export async function addMileageLog(log: Omit<MileageLog, 'id' | 'createdAt'>): Promise<string> {
+  const id = `km_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const totalKm = Math.max(0, (Number(log.endKm) || 0) - (Number(log.startKm) || 0));
+  const newLog: MileageLog = {
+    ...log,
+    id,
+    totalKm,
+    createdAt: new Date().toISOString(),
+  };
+
+  try {
+    await setDoc(doc(db, MILEAGE_COLLECTION, id), newLog);
+    return id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, `${MILEAGE_COLLECTION}/${id}`);
+    throw error;
+  }
+}
+
+export async function updateMileageLog(id: string, updates: Partial<MileageLog>): Promise<void> {
+  try {
+    let finalUpdates = { ...updates, updatedAt: new Date().toISOString() };
+    if (updates.startKm !== undefined || updates.endKm !== undefined) {
+      const s = Number(updates.startKm) || 0;
+      const e = Number(updates.endKm) || 0;
+      finalUpdates.totalKm = Math.max(0, e - s);
+    }
+    await updateDoc(doc(db, MILEAGE_COLLECTION, id), finalUpdates);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `${MILEAGE_COLLECTION}/${id}`);
+    throw error;
+  }
+}
+
+export async function deleteMileageLog(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, MILEAGE_COLLECTION, id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `${MILEAGE_COLLECTION}/${id}`);
     throw error;
   }
 }
@@ -254,6 +452,82 @@ export async function seedInitialDataIfEmpty(): Promise<boolean> {
     return true;
   } catch (err) {
     console.error('Error during data initialization:', err);
+    return false;
+  }
+}
+
+// Fleet initial seed if fleet records are empty
+export async function seedInitialFleetDataIfEmpty(): Promise<boolean> {
+  try {
+    if (typeof window !== 'undefined' && localStorage.getItem('gls_fleet_seeded') === 'true') {
+      return false;
+    }
+
+    const initRef = doc(db, 'settings', 'fleet_init');
+    const initSnap = await getDoc(initRef);
+    if (initSnap.exists()) {
+      if (typeof window !== 'undefined') localStorage.setItem('gls_fleet_seeded', 'true');
+      return false;
+    }
+
+    const existingFuel = await getDocs(collection(db, FUEL_COLLECTION));
+    if (!existingFuel.empty) {
+      await setDoc(initRef, { seeded: true, initializedAt: new Date().toISOString() });
+      if (typeof window !== 'undefined') localStorage.setItem('gls_fleet_seeded', 'true');
+      return false;
+    }
+
+    await setDoc(initRef, { seeded: true, initializedAt: new Date().toISOString() });
+    if (typeof window !== 'undefined') localStorage.setItem('gls_fleet_seeded', 'true');
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const y1 = new Date(); y1.setDate(y1.getDate() - 1); const y1Str = y1.toISOString().split('T')[0];
+    const y2 = new Date(); y2.setDate(y2.getDate() - 2); const y2Str = y2.toISOString().split('T')[0];
+    const y3 = new Date(); y3.setDate(y3.getDate() - 3); const y3Str = y3.toISOString().split('T')[0];
+
+    const sampleFuel: Omit<FuelLog, 'id' | 'createdAt'>[] = [
+      { date: todayStr, provider: 'Oscar', driverName: 'Carlos Silva', vehiclePlate: 'ABC-1234', vehicleModel: 'Van Master', odometerKm: 112500, fuelType: 'Diesel S10', liters: 65, pricePerLiter: 6.05, totalCost: 393.25, stationName: 'Posto Ipiranga Rodoanel', receiptNumber: 'NF-8821' },
+      { date: todayStr, provider: 'Tiago', driverName: 'Anderson Souza', vehiclePlate: 'PQR-1122', vehicleModel: 'Sprinter 516', odometerKm: 145200, fuelType: 'Diesel S10', liters: 75, pricePerLiter: 6.10, totalCost: 457.50, stationName: 'Posto Petrobras Dutra', receiptNumber: 'NF-9042' },
+      { date: y1Str, provider: 'Oscar', driverName: 'Roberto Mendes', vehiclePlate: 'DEF-5678', vehicleModel: 'Fiorino 1.4', odometerKm: 78400, fuelType: 'Gasolina Comum', liters: 45, pricePerLiter: 5.95, totalCost: 267.75, stationName: 'Posto Shell Marginal', receiptNumber: 'NF-7634' },
+      { date: y1Str, provider: 'Tiago', driverName: 'Diego Pereira', vehiclePlate: 'STU-3344', vehicleModel: 'Master L3H2', odometerKm: 89600, fuelType: 'Diesel S10', liters: 68, pricePerLiter: 6.05, totalCost: 411.40, stationName: 'Posto Graal Castelo Branco', receiptNumber: 'NF-6612' },
+      { date: y2Str, provider: 'Oscar', driverName: 'Lucas Rocha', vehiclePlate: 'GHI-9012', vehicleModel: 'Sprinter 415', odometerKm: 130100, fuelType: 'Diesel S10', liters: 70, pricePerLiter: 6.08, totalCost: 425.60, stationName: 'Posto Ipiranga Bandeirantes', receiptNumber: 'NF-5491' },
+      { date: y3Str, provider: 'Tiago', driverName: 'Rafael Costa', vehiclePlate: 'VWX-5566', vehicleModel: 'Fiorino Endurance', odometerKm: 52300, fuelType: 'Gasolina Comum', liters: 42, pricePerLiter: 5.99, totalCost: 251.58, stationName: 'Auto Posto Anhanguera', receiptNumber: 'NF-4321' },
+    ];
+
+    for (let i = 0; i < sampleFuel.length; i++) {
+      const id = `seed_fuel_${i + 1}`;
+      await setDoc(doc(db, FUEL_COLLECTION, id), { ...sampleFuel[i], id, createdAt: new Date().toISOString() });
+    }
+
+    const sampleMaintenance: Omit<MaintenanceLog, 'id' | 'createdAt'>[] = [
+      { date: y2Str, provider: 'Oscar', driverName: 'Carlos Silva', vehiclePlate: 'ABC-1234', vehicleModel: 'Van Master', odometerKm: 110000, type: 'Preventiva', category: 'Óleo e Filtros', description: 'Troca de Óleo 5W30 Sintético, Filtro de Óleo, Combustível e Ar', cost: 580, workshop: 'Oficina Mecânica RodoSul', invoiceNumber: 'OS-1044', nextMaintenanceKm: 120000, nextMaintenanceDate: '2026-12-15', status: 'Concluída' },
+      { date: y3Str, provider: 'Oscar', driverName: 'Roberto Mendes', vehiclePlate: 'DEF-5678', vehicleModel: 'Fiorino 1.4', odometerKm: 75000, type: 'Preventiva', category: 'Freios e Pastilhas', description: 'Substituição de pastilhas de freio dianteiras, discos e alinhamento', cost: 420, workshop: 'Centro Automotivo Paulista', invoiceNumber: 'OS-1089', nextMaintenanceKm: 85000, status: 'Concluída' },
+      { date: y1Str, provider: 'Tiago', driverName: 'Anderson Souza', vehiclePlate: 'PQR-1122', vehicleModel: 'Sprinter 516', odometerKm: 140000, type: 'Preventiva', category: 'Pneus e Geometria', description: 'Troca de 2 Pneus dianteiros aro 16 de carga e balanceamento computadorizado', cost: 1680, workshop: 'Pneus & Cia Distribuidora', invoiceNumber: 'OS-2022', nextMaintenanceKm: 160000, status: 'Concluída' },
+      { date: y2Str, provider: 'Tiago', driverName: 'Bruno Martins', vehiclePlate: 'YZA-7788', vehicleModel: 'Jumpy Cargo', odometerKm: 95000, type: 'Corretiva', category: 'Motor e Câmbio', description: 'Troca do kit de correia dentada, tensor e bomba d\'água após ruído', cost: 890, workshop: 'Oficina Especializada Diesel', invoiceNumber: 'OS-2115', status: 'Concluída' },
+    ];
+
+    for (let i = 0; i < sampleMaintenance.length; i++) {
+      const id = `seed_maint_${i + 1}`;
+      await setDoc(doc(db, MAINTENANCE_COLLECTION, id), { ...sampleMaintenance[i], id, createdAt: new Date().toISOString() });
+    }
+
+    const sampleMileage: Omit<MileageLog, 'id' | 'createdAt'>[] = [
+      { date: todayStr, provider: 'Oscar', driverName: 'Carlos Silva', vehiclePlate: 'ABC-1234', vehicleModel: 'Van Master', routeNumber: 'RT-101', startKm: 112320, endKm: 112500, totalKm: 180, notes: 'Rota comercial cumprida' },
+      { date: todayStr, provider: 'Oscar', driverName: 'Roberto Mendes', vehiclePlate: 'DEF-5678', vehicleModel: 'Fiorino 1.4', routeNumber: 'RT-102', startKm: 78260, endKm: 78400, totalKm: 140, notes: 'Entregas na Zona Sul' },
+      { date: todayStr, provider: 'Tiago', driverName: 'Anderson Souza', vehiclePlate: 'PQR-1122', vehicleModel: 'Sprinter 516', routeNumber: 'RT-201', startKm: 144980, endKm: 145200, totalKm: 220, notes: 'Metropolitana Leste' },
+      { date: todayStr, provider: 'Tiago', driverName: 'Diego Pereira', vehiclePlate: 'STU-3344', vehicleModel: 'Master L3H2', routeNumber: 'RT-202', startKm: 89435, endKm: 89600, totalKm: 165, notes: 'Zona Oeste e Pinheiros' },
+      { date: y1Str, provider: 'Oscar', driverName: 'Lucas Rocha', vehiclePlate: 'GHI-9012', vehicleModel: 'Sprinter 415', routeNumber: 'RT-103', startKm: 129890, endKm: 130100, totalKm: 210 },
+      { date: y1Str, provider: 'Tiago', driverName: 'Rafael Costa', vehiclePlate: 'VWX-5566', vehicleModel: 'Fiorino Endurance', routeNumber: 'RT-203', startKm: 52120, endKm: 52300, totalKm: 180 },
+    ];
+
+    for (let i = 0; i < sampleMileage.length; i++) {
+      const id = `seed_km_${i + 1}`;
+      await setDoc(doc(db, MILEAGE_COLLECTION, id), { ...sampleMileage[i], id, createdAt: new Date().toISOString() });
+    }
+
+    return true;
+  } catch (err) {
+    console.error('Error during fleet data initialization:', err);
     return false;
   }
 }

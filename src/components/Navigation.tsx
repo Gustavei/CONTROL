@@ -1,13 +1,14 @@
 import React from 'react';
-import { LayoutDashboard, Users, Trophy, History, FileText, UserCheck } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, History, FileText, UserCheck, Gauge } from 'lucide-react';
 
-export type TabId = 'dashboard' | 'oscar' | 'tiago' | 'rankings' | 'history' | 'reports';
+export type TabId = 'dashboard' | 'oscar' | 'tiago' | 'rankings' | 'history' | 'fleet' | 'reports';
 
 interface NavigationProps {
   activeTab: TabId;
   onSelectTab: (tab: TabId) => void;
   oscarCount: number;
   tiagoCount: number;
+  fleetCount?: number;
 }
 
 export const Navigation: React.FC<NavigationProps> = ({
@@ -15,6 +16,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   onSelectTab,
   oscarCount,
   tiagoCount,
+  fleetCount,
 }) => {
   const tabs = [
     { id: 'dashboard' as TabId, label: 'Visão Geral', icon: LayoutDashboard },
@@ -32,6 +34,12 @@ export const Navigation: React.FC<NavigationProps> = ({
     },
     { id: 'rankings' as TabId, label: 'Rankings', icon: Trophy },
     { id: 'history' as TabId, label: 'Histórico de Rotas', icon: History },
+    {
+      id: 'fleet' as TabId,
+      label: 'Frota & Custos',
+      icon: Gauge,
+      badge: fleetCount ? `${fleetCount} reg.` : 'KM / Combustível',
+    },
     { id: 'reports' as TabId, label: 'Relatórios PDF', icon: FileText },
   ];
 
