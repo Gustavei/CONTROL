@@ -67,8 +67,8 @@ export interface MaintenanceLog {
   cost: number;
   workshop: string;
   invoiceNumber?: string;
-  nextMaintenanceKm?: number;
-  nextMaintenanceDate?: string;
+  nextMaintenanceKm?: number | null;
+  nextMaintenanceDate?: string | null;
   status: MaintenanceStatus;
   notes?: string;
   createdAt: string;

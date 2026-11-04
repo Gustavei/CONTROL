@@ -139,12 +139,12 @@ export const FleetView: React.FC<FleetViewProps> = ({
   const costPerKm = totalKm > 0 ? (totalFleetCost / totalKm).toFixed(2) : '0.00';
 
   // Provider breakdowns
-  const oscarFuel = fuelLogs.filter((f) => f.provider === 'Oscar').reduce((a, c) => a + c.totalCost, 0);
-  const tiagoFuel = fuelLogs.filter((f) => f.provider === 'Tiago').reduce((a, c) => a + c.totalCost, 0);
-  const oscarMaint = maintenanceLogs.filter((m) => m.provider === 'Oscar').reduce((a, c) => a + c.cost, 0);
-  const tiagoMaint = maintenanceLogs.filter((m) => m.provider === 'Tiago').reduce((a, c) => a + c.cost, 0);
-  const oscarKm = mileageLogs.filter((k) => k.provider === 'Oscar').reduce((a, c) => a + c.totalKm, 0);
-  const tiagoKm = mileageLogs.filter((k) => k.provider === 'Tiago').reduce((a, c) => a + c.totalKm, 0);
+  const oscarFuel = fuelLogs.filter((f) => f.provider === 'Oscar').reduce((a, c) => a + (Number(c.totalCost) || 0), 0);
+  const tiagoFuel = fuelLogs.filter((f) => f.provider === 'Tiago').reduce((a, c) => a + (Number(c.totalCost) || 0), 0);
+  const oscarMaint = maintenanceLogs.filter((m) => m.provider === 'Oscar').reduce((a, c) => a + (Number(c.cost) || 0), 0);
+  const tiagoMaint = maintenanceLogs.filter((m) => m.provider === 'Tiago').reduce((a, c) => a + (Number(c.cost) || 0), 0);
+  const oscarKm = mileageLogs.filter((k) => k.provider === 'Oscar').reduce((a, c) => a + (Number(c.totalKm) || 0), 0);
+  const tiagoKm = mileageLogs.filter((k) => k.provider === 'Tiago').reduce((a, c) => a + (Number(c.totalKm) || 0), 0);
 
   // Export Fleet Summary to CSV
   const exportFleetCsv = () => {

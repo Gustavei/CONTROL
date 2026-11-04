@@ -46,9 +46,9 @@ export const RouteModal: React.FC<RouteModalProps> = ({
   const [routeNumber, setRouteNumber] = useState<string>('');
   const [routeName, setRouteName] = useState<string>('');
   const [locality, setLocality] = useState<string>('');
-  const [volumes, setVolumes] = useState<number | string>(250);
-  const [packages, setPackages] = useState<number | string>(220);
-  const [incidences, setIncidences] = useState<number | string>(5);
+  const [volumes, setVolumes] = useState<number | string>('');
+  const [packages, setPackages] = useState<number | string>('');
+  const [incidences, setIncidences] = useState<number | string>(0);
   const [notes, setNotes] = useState<string>('');
 
   const [saving, setSaving] = useState(false);
@@ -78,9 +78,9 @@ export const RouteModal: React.FC<RouteModalProps> = ({
       setRouteNumber('');
       setRouteName('');
       setLocality('');
-      setVolumes(250);
-      setPackages(220);
-      setIncidences(4);
+      setVolumes('');
+      setPackages('');
+      setIncidences(0);
       setNotes('');
       // Auto select first driver of this provider
       const provDrivers = drivers.filter((d) => d.provider === defaultProvider);

@@ -27,6 +27,19 @@ const FUEL_COLLECTION = 'fuel_logs';
 const MAINTENANCE_COLLECTION = 'maintenance_logs';
 const MILEAGE_COLLECTION = 'mileage_logs';
 
+/**
+ * Removes any undefined properties to prevent Firestore serialization errors
+ */
+function sanitizeData<T extends Record<string, any>>(obj: T): T {
+  const clean: any = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      clean[key] = value;
+    }
+  }
+  return clean as T;
+}
+
 export function subscribeRoutes(
   onData: (routes: RouteRecord[]) => void,
   onError?: (err: unknown) => void
@@ -148,7 +161,7 @@ export async function addRoute(route: Omit<RouteRecord, 'id' | 'createdAt'>): Pr
   };
 
   try {
-    await setDoc(doc(db, ROUTES_COLLECTION, id), newRoute);
+    await setDoc(doc(db, ROUTES_COLLECTION, id), sanitizeData(newRoute));
     return id;
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, `${ROUTES_COLLECTION}/${id}`);
@@ -164,7 +177,7 @@ export async function updateRoute(id: string, updates: Partial<RouteRecord>): Pr
       const incs = updates.incidences ?? 0;
       finalUpdates.quality = calculateQuality(pkgs, incs);
     }
-    await updateDoc(doc(db, ROUTES_COLLECTION, id), finalUpdates);
+    await updateDoc(doc(db, ROUTES_COLLECTION, id), sanitizeData(finalUpdates));
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `${ROUTES_COLLECTION}/${id}`);
     throw error;
@@ -189,7 +202,7 @@ export async function addDriver(driver: Omit<Driver, 'id' | 'createdAt'>): Promi
   };
 
   try {
-    await setDoc(doc(db, DRIVERS_COLLECTION, id), newDriver);
+    await setDoc(doc(db, DRIVERS_COLLECTION, id), sanitizeData(newDriver));
     return id;
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, `${DRIVERS_COLLECTION}/${id}`);
@@ -199,7 +212,7 @@ export async function addDriver(driver: Omit<Driver, 'id' | 'createdAt'>): Promi
 
 export async function updateDriver(id: string, updates: Partial<Driver>): Promise<void> {
   try {
-    await updateDoc(doc(db, DRIVERS_COLLECTION, id), updates);
+    await updateDoc(doc(db, DRIVERS_COLLECTION, id), sanitizeData(updates));
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `${DRIVERS_COLLECTION}/${id}`);
     throw error;
@@ -225,7 +238,7 @@ export async function addFuelLog(log: Omit<FuelLog, 'id' | 'createdAt'>): Promis
   };
 
   try {
-    await setDoc(doc(db, FUEL_COLLECTION, id), newLog);
+    await setDoc(doc(db, FUEL_COLLECTION, id), sanitizeData(newLog));
     return id;
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, `${FUEL_COLLECTION}/${id}`);
@@ -235,10 +248,10 @@ export async function addFuelLog(log: Omit<FuelLog, 'id' | 'createdAt'>): Promis
 
 export async function updateFuelLog(id: string, updates: Partial<FuelLog>): Promise<void> {
   try {
-    await updateDoc(doc(db, FUEL_COLLECTION, id), {
+    await updateDoc(doc(db, FUEL_COLLECTION, id), sanitizeData({
       ...updates,
       updatedAt: new Date().toISOString(),
-    });
+    }));
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `${FUEL_COLLECTION}/${id}`);
     throw error;
@@ -264,7 +277,7 @@ export async function addMaintenanceLog(log: Omit<MaintenanceLog, 'id' | 'create
   };
 
   try {
-    await setDoc(doc(db, MAINTENANCE_COLLECTION, id), newLog);
+    await setDoc(doc(db, MAINTENANCE_COLLECTION, id), sanitizeData(newLog));
     return id;
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, `${MAINTENANCE_COLLECTION}/${id}`);
@@ -274,10 +287,10 @@ export async function addMaintenanceLog(log: Omit<MaintenanceLog, 'id' | 'create
 
 export async function updateMaintenanceLog(id: string, updates: Partial<MaintenanceLog>): Promise<void> {
   try {
-    await updateDoc(doc(db, MAINTENANCE_COLLECTION, id), {
+    await updateDoc(doc(db, MAINTENANCE_COLLECTION, id), sanitizeData({
       ...updates,
       updatedAt: new Date().toISOString(),
-    });
+    }));
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `${MAINTENANCE_COLLECTION}/${id}`);
     throw error;
@@ -305,7 +318,7 @@ export async function addMileageLog(log: Omit<MileageLog, 'id' | 'createdAt'>): 
   };
 
   try {
-    await setDoc(doc(db, MILEAGE_COLLECTION, id), newLog);
+    await setDoc(doc(db, MILEAGE_COLLECTION, id), sanitizeData(newLog));
     return id;
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, `${MILEAGE_COLLECTION}/${id}`);
@@ -321,7 +334,7 @@ export async function updateMileageLog(id: string, updates: Partial<MileageLog>)
       const e = Number(updates.endKm) || 0;
       finalUpdates.totalKm = Math.max(0, e - s);
     }
-    await updateDoc(doc(db, MILEAGE_COLLECTION, id), finalUpdates);
+    await updateDoc(doc(db, MILEAGE_COLLECTION, id), sanitizeData(finalUpdates));
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `${MILEAGE_COLLECTION}/${id}`);
     throw error;

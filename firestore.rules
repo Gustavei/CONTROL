@@ -6,6 +6,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Test connection check
+    match /test/{testId} {
+      allow read, write: if true;
+    }
+
     // Routes collection - Permitted for operations and real-time synchronization
     match /routes/{routeId} {
       allow read, write: if true;
