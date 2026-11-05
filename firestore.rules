@@ -21,6 +21,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Vehicles / Furgonetas collection
+    match /vehicles/{vehicleId} {
+      allow read, write: if true;
+    }
+
     // Fuel logs collection
     match /fuel_logs/{logId} {
       allow read, write: if true;

@@ -15,6 +15,7 @@ import { db, handleFirestoreError, OperationType } from '../lib/firebase.ts';
 import {
   RouteRecord,
   Driver,
+  Vehicle,
   FuelLog,
   MaintenanceLog,
   MileageLog,
@@ -23,6 +24,7 @@ import {
 
 const ROUTES_COLLECTION = 'routes';
 const DRIVERS_COLLECTION = 'drivers';
+const VEHICLES_COLLECTION = 'vehicles';
 const FUEL_COLLECTION = 'fuel_logs';
 const MAINTENANCE_COLLECTION = 'maintenance_logs';
 const MILEAGE_COLLECTION = 'mileage_logs';
@@ -79,6 +81,28 @@ export function subscribeDrivers(
     (error) => {
       console.error('Error fetching drivers:', error);
       handleFirestoreError(error, OperationType.LIST, DRIVERS_COLLECTION);
+      if (onError) onError(error);
+    }
+  );
+}
+
+export function subscribeVehicles(
+  onData: (vehicles: Vehicle[]) => void,
+  onError?: (err: unknown) => void
+) {
+  const q = query(collection(db, VEHICLES_COLLECTION), orderBy('name', 'asc'));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const vehicles: Vehicle[] = [];
+      snapshot.forEach((doc) => {
+        vehicles.push({ id: doc.id, ...doc.data() } as Vehicle);
+      });
+      onData(vehicles);
+    },
+    (error) => {
+      console.error('Error fetching vehicles:', error);
+      handleFirestoreError(error, OperationType.LIST, VEHICLES_COLLECTION);
       if (onError) onError(error);
     }
   );
@@ -228,17 +252,132 @@ export async function deleteDriver(id: string): Promise<void> {
   }
 }
 
+// Vehicles (Furgonetas) CRUD
+export async function addVehicle(vehicle: Omit<Vehicle, 'id' | 'createdAt'>): Promise<string> {
+  const id = `veh_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const initKm = Number(vehicle.initialOdometer) || 0;
+  const currentKm = Number(vehicle.currentOdometer) || initKm;
+  const newVehicle: Vehicle = {
+    ...vehicle,
+    id,
+    plate: vehicle.plate.trim().toUpperCase(),
+    initialOdometer: initKm,
+    currentOdometer: currentKm,
+    createdAt: new Date().toISOString(),
+  };
+
+  try {
+    await setDoc(doc(db, VEHICLES_COLLECTION, id), sanitizeData(newVehicle));
+    return id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, `${VEHICLES_COLLECTION}/${id}`);
+    throw error;
+  }
+}
+
+export async function updateVehicle(id: string, updates: Partial<Vehicle>): Promise<void> {
+  try {
+    const sanitized = {
+      ...updates,
+      ...(updates.plate ? { plate: updates.plate.trim().toUpperCase() } : {}),
+      ...(updates.initialOdometer !== undefined ? { initialOdometer: Number(updates.initialOdometer) || 0 } : {}),
+      ...(updates.currentOdometer !== undefined ? { currentOdometer: Number(updates.currentOdometer) || 0 } : {}),
+      updatedAt: new Date().toISOString(),
+    };
+    await updateDoc(doc(db, VEHICLES_COLLECTION, id), sanitizeData(sanitized));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `${VEHICLES_COLLECTION}/${id}`);
+    throw error;
+  }
+}
+
+export async function deleteVehicle(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, VEHICLES_COLLECTION, id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `${VEHICLES_COLLECTION}/${id}`);
+    throw error;
+  }
+}
+
+export async function getLastFuelLogForVehicle(plate: string, beforeOdometer?: number): Promise<FuelLog | null> {
+  try {
+    const snap = await getDocs(query(collection(db, FUEL_COLLECTION), orderBy('date', 'desc')));
+    const logs = snap.docs.map((d) => d.data() as FuelLog);
+    const filtered = logs.filter((f) => {
+      const matchPlate = f.vehiclePlate && f.vehiclePlate.trim().toUpperCase() === plate.trim().toUpperCase();
+      const matchKm = beforeOdometer ? Number(f.odometerKm) < beforeOdometer : true;
+      return matchPlate && matchKm;
+    });
+    if (filtered.length === 0) return null;
+    filtered.sort((a, b) => (Number(b.odometerKm) || 0) - (Number(a.odometerKm) || 0));
+    return filtered[0];
+  } catch (err) {
+    console.error('Error fetching last fuel log:', err);
+    return null;
+  }
+}
+
 // Fuel Logs CRUD
 export async function addFuelLog(log: Omit<FuelLog, 'id' | 'createdAt'>): Promise<string> {
   const id = `fuel_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+  let previousOdometerKm: number | null = log.previousOdometerKm !== undefined ? log.previousOdometerKm : null;
+  let distanceSinceLastFuel: number | null = log.distanceSinceLastFuel !== undefined ? log.distanceSinceLastFuel : null;
+  let fuelEfficiencyKmL: number | null = log.fuelEfficiencyKmL !== undefined ? log.fuelEfficiencyKmL : null;
+  let costPerKm: number | null = log.costPerKm !== undefined ? log.costPerKm : null;
+
+  // Auto calculate comparison if not pre-calculated
+  if (previousOdometerKm === null && log.vehiclePlate) {
+    try {
+      const prev = await getLastFuelLogForVehicle(log.vehiclePlate, Number(log.odometerKm));
+      if (prev && prev.odometerKm) {
+        previousOdometerKm = Number(prev.odometerKm);
+        const dist = Number(log.odometerKm) - Number(prev.odometerKm);
+        if (dist > 0) {
+          distanceSinceLastFuel = dist;
+          if (Number(log.liters) > 0) {
+            fuelEfficiencyKmL = Number((dist / Number(log.liters)).toFixed(2));
+          }
+          if (Number(log.totalCost) > 0) {
+            costPerKm = Number((Number(log.totalCost) / dist).toFixed(2));
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Could not auto-calculate fuel delta:', e);
+    }
+  }
+
   const newLog: FuelLog = {
     ...log,
     id,
+    previousOdometerKm,
+    distanceSinceLastFuel,
+    fuelEfficiencyKmL,
+    costPerKm,
     createdAt: new Date().toISOString(),
   };
 
   try {
     await setDoc(doc(db, FUEL_COLLECTION, id), sanitizeData(newLog));
+
+    // Update vehicle's currentOdometer if applicable
+    if (log.vehicleId) {
+      try {
+        const vRef = doc(db, VEHICLES_COLLECTION, log.vehicleId);
+        const vSnap = await getDoc(vRef);
+        if (vSnap.exists()) {
+          const vData = vSnap.data() as Vehicle;
+          if (Number(log.odometerKm) > (Number(vData.currentOdometer) || 0)) {
+            await updateDoc(vRef, { currentOdometer: Number(log.odometerKm), updatedAt: new Date().toISOString() });
+          }
+        }
+      } catch (err) {
+        console.warn('Error updating vehicle odometer:', err);
+      }
+    }
+
     return id;
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, `${FUEL_COLLECTION}/${id}`);
@@ -319,6 +458,24 @@ export async function addMileageLog(log: Omit<MileageLog, 'id' | 'createdAt'>): 
 
   try {
     await setDoc(doc(db, MILEAGE_COLLECTION, id), sanitizeData(newLog));
+
+    // Update vehicle's currentOdometer if applicable
+    if (log.vehicleId) {
+      try {
+        const vRef = doc(db, VEHICLES_COLLECTION, log.vehicleId);
+        const vSnap = await getDoc(vRef);
+        if (vSnap.exists()) {
+          const vData = vSnap.data() as Vehicle;
+          const endNum = Number(log.endKm) || 0;
+          if (endNum > (Number(vData.currentOdometer) || 0)) {
+            await updateDoc(vRef, { currentOdometer: endNum, updatedAt: new Date().toISOString() });
+          }
+        }
+      } catch (err) {
+        console.warn('Error updating vehicle odometer on mileage entry:', err);
+      }
+    }
+
     return id;
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, `${MILEAGE_COLLECTION}/${id}`);
@@ -470,8 +627,124 @@ export async function seedInitialDataIfEmpty(): Promise<boolean> {
 }
 
 // Fleet initial seed if fleet records are empty
+// Seed initial vehicles if empty
+export async function seedVehiclesIfEmpty(): Promise<boolean> {
+  try {
+    const existingVehicles = await getDocs(collection(db, VEHICLES_COLLECTION));
+    if (!existingVehicles.empty) {
+      return false;
+    }
+
+    const defaultVehicles: Vehicle[] = [
+      {
+        id: 'veh_osc_1',
+        name: 'Furgoneta 01 - Master',
+        plate: 'ABC-1234',
+        model: 'Renault Master L3H2',
+        provider: 'Oscar',
+        defaultDriverName: 'Carlos Silva',
+        initialOdometer: 110000,
+        currentOdometer: 112500,
+        fuelType: 'Diesel S10',
+        tankCapacity: 80,
+        status: 'active',
+        notes: 'Furgoneta principal para entregas em rota comercial',
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: 'veh_osc_2',
+        name: 'Furgoneta 02 - Fiorino',
+        plate: 'DEF-5678',
+        model: 'Fiat Fiorino 1.4 EVO',
+        provider: 'Oscar',
+        defaultDriverName: 'Roberto Mendes',
+        initialOdometer: 76000,
+        currentOdometer: 78400,
+        fuelType: 'Gasolina Comum',
+        tankCapacity: 55,
+        status: 'active',
+        notes: 'Furgoneta ágil para entregas urbanas na Zona Sul',
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: 'veh_osc_3',
+        name: 'Furgoneta 03 - Sprinter',
+        plate: 'GHI-9012',
+        model: 'Mercedes-Benz Sprinter 415',
+        provider: 'Oscar',
+        defaultDriverName: 'Lucas Rocha',
+        initialOdometer: 128000,
+        currentOdometer: 130100,
+        fuelType: 'Diesel S10',
+        tankCapacity: 75,
+        status: 'active',
+        notes: 'Furgoneta de grande porte para rotas industriais',
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: 'veh_tia_1',
+        name: 'Furgoneta 04 - Sprinter',
+        plate: 'PQR-1122',
+        model: 'Mercedes-Benz Sprinter 516',
+        provider: 'Tiago',
+        defaultDriverName: 'Anderson Souza',
+        initialOdometer: 142000,
+        currentOdometer: 145200,
+        fuelType: 'Diesel S10',
+        tankCapacity: 75,
+        status: 'active',
+        notes: 'Furgoneta pesada com alta capacidade volumétrica',
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: 'veh_tia_2',
+        name: 'Furgoneta 05 - Master',
+        plate: 'STU-3344',
+        model: 'Renault Master L3H2',
+        provider: 'Tiago',
+        defaultDriverName: 'Diego Pereira',
+        initialOdometer: 87000,
+        currentOdometer: 89600,
+        fuelType: 'Diesel S10',
+        tankCapacity: 80,
+        status: 'active',
+        notes: 'Furgoneta revisada com excelente consumo',
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: 'veh_tia_3',
+        name: 'Furgoneta 06 - Fiorino',
+        plate: 'VWX-5566',
+        model: 'Fiat Fiorino Endurance',
+        provider: 'Tiago',
+        defaultDriverName: 'Rafael Costa',
+        initialOdometer: 50000,
+        currentOdometer: 52300,
+        fuelType: 'Gasolina Comum',
+        tankCapacity: 55,
+        status: 'active',
+        notes: 'Furgoneta compacta com revisão recente',
+        createdAt: new Date().toISOString(),
+      },
+    ];
+
+    for (const v of defaultVehicles) {
+      await setDoc(doc(db, VEHICLES_COLLECTION, v.id), sanitizeData(v));
+    }
+
+    return true;
+  } catch (err) {
+    console.error('Error seeding vehicles:', err);
+    return false;
+  }
+}
+
+// Fleet initial seed if fleet records are empty
 export async function seedInitialFleetDataIfEmpty(): Promise<boolean> {
   try {
+    // Also ensure vehicles are seeded
+    await seedVehiclesIfEmpty();
+
     if (typeof window !== 'undefined' && localStorage.getItem('gls_fleet_seeded') === 'true') {
       return false;
     }
@@ -499,43 +772,151 @@ export async function seedInitialFleetDataIfEmpty(): Promise<boolean> {
     const y3 = new Date(); y3.setDate(y3.getDate() - 3); const y3Str = y3.toISOString().split('T')[0];
 
     const sampleFuel: Omit<FuelLog, 'id' | 'createdAt'>[] = [
-      { date: todayStr, provider: 'Oscar', driverName: 'Carlos Silva', vehiclePlate: 'ABC-1234', vehicleModel: 'Van Master', odometerKm: 112500, fuelType: 'Diesel S10', liters: 65, pricePerLiter: 6.05, totalCost: 393.25, stationName: 'Posto Ipiranga Rodoanel', receiptNumber: 'NF-8821' },
-      { date: todayStr, provider: 'Tiago', driverName: 'Anderson Souza', vehiclePlate: 'PQR-1122', vehicleModel: 'Sprinter 516', odometerKm: 145200, fuelType: 'Diesel S10', liters: 75, pricePerLiter: 6.10, totalCost: 457.50, stationName: 'Posto Petrobras Dutra', receiptNumber: 'NF-9042' },
-      { date: y1Str, provider: 'Oscar', driverName: 'Roberto Mendes', vehiclePlate: 'DEF-5678', vehicleModel: 'Fiorino 1.4', odometerKm: 78400, fuelType: 'Gasolina Comum', liters: 45, pricePerLiter: 5.95, totalCost: 267.75, stationName: 'Posto Shell Marginal', receiptNumber: 'NF-7634' },
-      { date: y1Str, provider: 'Tiago', driverName: 'Diego Pereira', vehiclePlate: 'STU-3344', vehicleModel: 'Master L3H2', odometerKm: 89600, fuelType: 'Diesel S10', liters: 68, pricePerLiter: 6.05, totalCost: 411.40, stationName: 'Posto Graal Castelo Branco', receiptNumber: 'NF-6612' },
-      { date: y2Str, provider: 'Oscar', driverName: 'Lucas Rocha', vehiclePlate: 'GHI-9012', vehicleModel: 'Sprinter 415', odometerKm: 130100, fuelType: 'Diesel S10', liters: 70, pricePerLiter: 6.08, totalCost: 425.60, stationName: 'Posto Ipiranga Bandeirantes', receiptNumber: 'NF-5491' },
-      { date: y3Str, provider: 'Tiago', driverName: 'Rafael Costa', vehiclePlate: 'VWX-5566', vehicleModel: 'Fiorino Endurance', odometerKm: 52300, fuelType: 'Gasolina Comum', liters: 42, pricePerLiter: 5.99, totalCost: 251.58, stationName: 'Auto Posto Anhanguera', receiptNumber: 'NF-4321' },
+      {
+        date: todayStr,
+        provider: 'Oscar',
+        vehicleId: 'veh_osc_1',
+        driverName: 'Carlos Silva',
+        vehiclePlate: 'ABC-1234',
+        vehicleModel: 'Renault Master L3H2',
+        odometerKm: 112500,
+        previousOdometerKm: 111850,
+        distanceSinceLastFuel: 650,
+        fuelEfficiencyKmL: 10.0,
+        costPerKm: 0.61,
+        fuelType: 'Diesel S10',
+        liters: 65,
+        pricePerLiter: 6.05,
+        totalCost: 393.25,
+        stationName: 'Posto Ipiranga Rodoanel',
+        receiptNumber: 'NF-8821',
+      },
+      {
+        date: todayStr,
+        provider: 'Tiago',
+        vehicleId: 'veh_tia_1',
+        driverName: 'Anderson Souza',
+        vehiclePlate: 'PQR-1122',
+        vehicleModel: 'Mercedes-Benz Sprinter 516',
+        odometerKm: 145200,
+        previousOdometerKm: 144480,
+        distanceSinceLastFuel: 720,
+        fuelEfficiencyKmL: 9.6,
+        costPerKm: 0.64,
+        fuelType: 'Diesel S10',
+        liters: 75,
+        pricePerLiter: 6.10,
+        totalCost: 457.50,
+        stationName: 'Posto Petrobras Dutra',
+        receiptNumber: 'NF-9042',
+      },
+      {
+        date: y1Str,
+        provider: 'Oscar',
+        vehicleId: 'veh_osc_2',
+        driverName: 'Roberto Mendes',
+        vehiclePlate: 'DEF-5678',
+        vehicleModel: 'Fiat Fiorino 1.4 EVO',
+        odometerKm: 78400,
+        previousOdometerKm: 77880,
+        distanceSinceLastFuel: 520,
+        fuelEfficiencyKmL: 11.56,
+        costPerKm: 0.51,
+        fuelType: 'Gasolina Comum',
+        liters: 45,
+        pricePerLiter: 5.95,
+        totalCost: 267.75,
+        stationName: 'Posto Shell Marginal',
+        receiptNumber: 'NF-7634',
+      },
+      {
+        date: y1Str,
+        provider: 'Tiago',
+        vehicleId: 'veh_tia_2',
+        driverName: 'Diego Pereira',
+        vehiclePlate: 'STU-3344',
+        vehicleModel: 'Renault Master L3H2',
+        odometerKm: 89600,
+        previousOdometerKm: 88920,
+        distanceSinceLastFuel: 680,
+        fuelEfficiencyKmL: 10.0,
+        costPerKm: 0.61,
+        fuelType: 'Diesel S10',
+        liters: 68,
+        pricePerLiter: 6.05,
+        totalCost: 411.40,
+        stationName: 'Posto Graal Castelo Branco',
+        receiptNumber: 'NF-6612',
+      },
+      {
+        date: y2Str,
+        provider: 'Oscar',
+        vehicleId: 'veh_osc_3',
+        driverName: 'Lucas Rocha',
+        vehiclePlate: 'GHI-9012',
+        vehicleModel: 'Mercedes-Benz Sprinter 415',
+        odometerKm: 130100,
+        previousOdometerKm: 129400,
+        distanceSinceLastFuel: 700,
+        fuelEfficiencyKmL: 10.0,
+        costPerKm: 0.61,
+        fuelType: 'Diesel S10',
+        liters: 70,
+        pricePerLiter: 6.08,
+        totalCost: 425.60,
+        stationName: 'Posto Ipiranga Bandeirantes',
+        receiptNumber: 'NF-5491',
+      },
+      {
+        date: y3Str,
+        provider: 'Tiago',
+        vehicleId: 'veh_tia_3',
+        driverName: 'Rafael Costa',
+        vehiclePlate: 'VWX-5566',
+        vehicleModel: 'Fiat Fiorino Endurance',
+        odometerKm: 52300,
+        previousOdometerKm: 51800,
+        distanceSinceLastFuel: 500,
+        fuelEfficiencyKmL: 11.9,
+        costPerKm: 0.5,
+        fuelType: 'Gasolina Comum',
+        liters: 42,
+        pricePerLiter: 5.99,
+        totalCost: 251.58,
+        stationName: 'Auto Posto Anhanguera',
+        receiptNumber: 'NF-4321',
+      },
     ];
 
     for (let i = 0; i < sampleFuel.length; i++) {
       const id = `seed_fuel_${i + 1}`;
-      await setDoc(doc(db, FUEL_COLLECTION, id), { ...sampleFuel[i], id, createdAt: new Date().toISOString() });
+      await setDoc(doc(db, FUEL_COLLECTION, id), sanitizeData({ ...sampleFuel[i], id, createdAt: new Date().toISOString() }));
     }
 
     const sampleMaintenance: Omit<MaintenanceLog, 'id' | 'createdAt'>[] = [
-      { date: y2Str, provider: 'Oscar', driverName: 'Carlos Silva', vehiclePlate: 'ABC-1234', vehicleModel: 'Van Master', odometerKm: 110000, type: 'Preventiva', category: 'Óleo e Filtros', description: 'Troca de Óleo 5W30 Sintético, Filtro de Óleo, Combustível e Ar', cost: 580, workshop: 'Oficina Mecânica RodoSul', invoiceNumber: 'OS-1044', nextMaintenanceKm: 120000, nextMaintenanceDate: '2026-12-15', status: 'Concluída' },
-      { date: y3Str, provider: 'Oscar', driverName: 'Roberto Mendes', vehiclePlate: 'DEF-5678', vehicleModel: 'Fiorino 1.4', odometerKm: 75000, type: 'Preventiva', category: 'Freios e Pastilhas', description: 'Substituição de pastilhas de freio dianteiras, discos e alinhamento', cost: 420, workshop: 'Centro Automotivo Paulista', invoiceNumber: 'OS-1089', nextMaintenanceKm: 85000, status: 'Concluída' },
-      { date: y1Str, provider: 'Tiago', driverName: 'Anderson Souza', vehiclePlate: 'PQR-1122', vehicleModel: 'Sprinter 516', odometerKm: 140000, type: 'Preventiva', category: 'Pneus e Geometria', description: 'Troca de 2 Pneus dianteiros aro 16 de carga e balanceamento computadorizado', cost: 1680, workshop: 'Pneus & Cia Distribuidora', invoiceNumber: 'OS-2022', nextMaintenanceKm: 160000, status: 'Concluída' },
-      { date: y2Str, provider: 'Tiago', driverName: 'Bruno Martins', vehiclePlate: 'YZA-7788', vehicleModel: 'Jumpy Cargo', odometerKm: 95000, type: 'Corretiva', category: 'Motor e Câmbio', description: 'Troca do kit de correia dentada, tensor e bomba d\'água após ruído', cost: 890, workshop: 'Oficina Especializada Diesel', invoiceNumber: 'OS-2115', status: 'Concluída' },
+      { date: y2Str, provider: 'Oscar', vehicleId: 'veh_osc_1', driverName: 'Carlos Silva', vehiclePlate: 'ABC-1234', vehicleModel: 'Renault Master L3H2', odometerKm: 110000, type: 'Preventiva', category: 'Óleo e Filtros', description: 'Troca de Óleo 5W30 Sintético, Filtro de Óleo, Combustível e Ar', cost: 580, workshop: 'Oficina Mecânica RodoSul', invoiceNumber: 'OS-1044', nextMaintenanceKm: 120000, nextMaintenanceDate: '2026-12-15', status: 'Concluída' },
+      { date: y3Str, provider: 'Oscar', vehicleId: 'veh_osc_2', driverName: 'Roberto Mendes', vehiclePlate: 'DEF-5678', vehicleModel: 'Fiat Fiorino 1.4 EVO', odometerKm: 75000, type: 'Preventiva', category: 'Freios e Pastilhas', description: 'Substituição de pastilhas de freio dianteiras, discos e alinhamento', cost: 420, workshop: 'Centro Automotivo Paulista', invoiceNumber: 'OS-1089', nextMaintenanceKm: 85000, status: 'Concluída' },
+      { date: y1Str, provider: 'Tiago', vehicleId: 'veh_tia_1', driverName: 'Anderson Souza', vehiclePlate: 'PQR-1122', vehicleModel: 'Mercedes-Benz Sprinter 516', odometerKm: 140000, type: 'Preventiva', category: 'Pneus e Geometria', description: 'Troca de 2 Pneus dianteiros aro 16 de carga e balanceamento computadorizado', cost: 1680, workshop: 'Pneus & Cia Distribuidora', invoiceNumber: 'OS-2022', nextMaintenanceKm: 160000, status: 'Concluída' },
+      { date: y2Str, provider: 'Tiago', vehicleId: 'veh_tia_3', driverName: 'Rafael Costa', vehiclePlate: 'VWX-5566', vehicleModel: 'Fiat Fiorino Endurance', odometerKm: 51000, type: 'Preventiva', category: 'Revisão Geral', description: 'Revisão periódica programada de 50.000 KM', cost: 350, workshop: 'Oficina Central Auto', invoiceNumber: 'OS-2115', nextMaintenanceKm: 60000, status: 'Concluída' },
     ];
 
     for (let i = 0; i < sampleMaintenance.length; i++) {
       const id = `seed_maint_${i + 1}`;
-      await setDoc(doc(db, MAINTENANCE_COLLECTION, id), { ...sampleMaintenance[i], id, createdAt: new Date().toISOString() });
+      await setDoc(doc(db, MAINTENANCE_COLLECTION, id), sanitizeData({ ...sampleMaintenance[i], id, createdAt: new Date().toISOString() }));
     }
 
     const sampleMileage: Omit<MileageLog, 'id' | 'createdAt'>[] = [
-      { date: todayStr, provider: 'Oscar', driverName: 'Carlos Silva', vehiclePlate: 'ABC-1234', vehicleModel: 'Van Master', routeNumber: 'RT-101', startKm: 112320, endKm: 112500, totalKm: 180, notes: 'Rota comercial cumprida' },
-      { date: todayStr, provider: 'Oscar', driverName: 'Roberto Mendes', vehiclePlate: 'DEF-5678', vehicleModel: 'Fiorino 1.4', routeNumber: 'RT-102', startKm: 78260, endKm: 78400, totalKm: 140, notes: 'Entregas na Zona Sul' },
-      { date: todayStr, provider: 'Tiago', driverName: 'Anderson Souza', vehiclePlate: 'PQR-1122', vehicleModel: 'Sprinter 516', routeNumber: 'RT-201', startKm: 144980, endKm: 145200, totalKm: 220, notes: 'Metropolitana Leste' },
-      { date: todayStr, provider: 'Tiago', driverName: 'Diego Pereira', vehiclePlate: 'STU-3344', vehicleModel: 'Master L3H2', routeNumber: 'RT-202', startKm: 89435, endKm: 89600, totalKm: 165, notes: 'Zona Oeste e Pinheiros' },
-      { date: y1Str, provider: 'Oscar', driverName: 'Lucas Rocha', vehiclePlate: 'GHI-9012', vehicleModel: 'Sprinter 415', routeNumber: 'RT-103', startKm: 129890, endKm: 130100, totalKm: 210 },
-      { date: y1Str, provider: 'Tiago', driverName: 'Rafael Costa', vehiclePlate: 'VWX-5566', vehicleModel: 'Fiorino Endurance', routeNumber: 'RT-203', startKm: 52120, endKm: 52300, totalKm: 180 },
+      { date: todayStr, provider: 'Oscar', vehicleId: 'veh_osc_1', driverName: 'Carlos Silva', vehiclePlate: 'ABC-1234', vehicleModel: 'Renault Master L3H2', routeNumber: 'RT-101', startKm: 112320, endKm: 112500, totalKm: 180, notes: 'Rota comercial cumprida' },
+      { date: todayStr, provider: 'Oscar', vehicleId: 'veh_osc_2', driverName: 'Roberto Mendes', vehiclePlate: 'DEF-5678', vehicleModel: 'Fiat Fiorino 1.4 EVO', routeNumber: 'RT-102', startKm: 78260, endKm: 78400, totalKm: 140, notes: 'Entregas na Zona Sul' },
+      { date: todayStr, provider: 'Tiago', vehicleId: 'veh_tia_1', driverName: 'Anderson Souza', vehiclePlate: 'PQR-1122', vehicleModel: 'Mercedes-Benz Sprinter 516', routeNumber: 'RT-201', startKm: 144980, endKm: 145200, totalKm: 220, notes: 'Metropolitana Leste' },
+      { date: todayStr, provider: 'Tiago', vehicleId: 'veh_tia_2', driverName: 'Diego Pereira', vehiclePlate: 'STU-3344', vehicleModel: 'Renault Master L3H2', routeNumber: 'RT-202', startKm: 89435, endKm: 89600, totalKm: 165, notes: 'Zona Oeste e Pinheiros' },
+      { date: y1Str, provider: 'Oscar', vehicleId: 'veh_osc_3', driverName: 'Lucas Rocha', vehiclePlate: 'GHI-9012', vehicleModel: 'Mercedes-Benz Sprinter 415', routeNumber: 'RT-103', startKm: 129890, endKm: 130100, totalKm: 210 },
+      { date: y1Str, provider: 'Tiago', vehicleId: 'veh_tia_3', driverName: 'Rafael Costa', vehiclePlate: 'VWX-5566', vehicleModel: 'Fiat Fiorino Endurance', routeNumber: 'RT-203', startKm: 52120, endKm: 52300, totalKm: 180 },
     ];
 
     for (let i = 0; i < sampleMileage.length; i++) {
       const id = `seed_km_${i + 1}`;
-      await setDoc(doc(db, MILEAGE_COLLECTION, id), { ...sampleMileage[i], id, createdAt: new Date().toISOString() });
+      await setDoc(doc(db, MILEAGE_COLLECTION, id), sanitizeData({ ...sampleMileage[i], id, createdAt: new Date().toISOString() }));
     }
 
     return true;
@@ -544,3 +925,4 @@ export async function seedInitialFleetDataIfEmpty(): Promise<boolean> {
     return false;
   }
 }
+

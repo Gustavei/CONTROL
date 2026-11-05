@@ -31,14 +31,36 @@ export interface Driver {
 
 export type FuelType = 'Diesel S10' | 'Gasolina Comum' | 'Gasolina Aditivada' | 'Etanol' | 'GNV' | 'Arla 32';
 
+export interface Vehicle {
+  id: string;
+  name: string; // Ex: "Furgoneta 01", "Van Master Oscar"
+  plate: string; // Ex: "ABC-1234"
+  model: string; // Ex: "Renault Master L3H2", "Fiat Fiorino 1.4"
+  provider: ProviderName; // "Oscar" | "Tiago"
+  defaultDriverName?: string;
+  initialOdometer: number; // KM no momento do cadastro
+  currentOdometer: number; // Odômetro atualizado
+  fuelType: FuelType;
+  tankCapacity?: number; // Capacidade do tanque em Litros
+  status: 'active' | 'maintenance' | 'inactive';
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface FuelLog {
   id: string;
   date: string; // YYYY-MM-DD
   provider: ProviderName;
+  vehicleId?: string; // ID da furgoneta
   driverName: string;
   vehiclePlate: string;
   vehicleModel?: string;
-  odometerKm: number;
+  odometerKm: number; // KM no momento do abastecimento
+  previousOdometerKm?: number | null; // Odômetro do último abastecimento
+  distanceSinceLastFuel?: number | null; // KM rodados desde o último abastecimento
+  fuelEfficiencyKmL?: number | null; // Média de consumo (KM / Litros)
+  costPerKm?: number | null; // Custo por KM rodado (R$ / KM)
   fuelType: FuelType;
   liters: number;
   pricePerLiter: number;
@@ -57,6 +79,7 @@ export interface MaintenanceLog {
   id: string;
   date: string; // YYYY-MM-DD
   provider: ProviderName;
+  vehicleId?: string;
   driverName?: string;
   vehiclePlate: string;
   vehicleModel?: string;
@@ -79,12 +102,13 @@ export interface MileageLog {
   id: string;
   date: string; // YYYY-MM-DD
   provider: ProviderName;
+  vehicleId?: string; // ID da furgoneta
   driverName: string;
   vehiclePlate: string;
   vehicleModel?: string;
   routeNumber?: string;
-  startKm: number;
-  endKm: number;
+  startKm: number; // KM Inicial da furgoneta
+  endKm: number; // KM Final da furgoneta
   totalKm: number; // endKm - startKm
   notes?: string;
   createdAt: string;

@@ -37,6 +37,27 @@
       },
       "required": ["provider", "name", "status"]
     },
+    "Vehicle": {
+      "title": "Vehicle",
+      "description": "Registered delivery van / furgoneta under a provider",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 100, "description": "Vehicle nickname or name" },
+        "plate": { "type": "string", "maxLength": 20, "description": "License plate" },
+        "model": { "type": "string", "maxLength": 100, "description": "Van model and make" },
+        "provider": { "type": "string", "enum": ["Oscar", "Tiago"], "description": "Assigned logistics provider" },
+        "defaultDriverName": { "type": "string", "maxLength": 100, "description": "Default assigned driver" },
+        "initialOdometer": { "type": "number", "description": "Initial odometer reading when registered" },
+        "currentOdometer": { "type": "number", "description": "Current last recorded odometer" },
+        "fuelType": { "type": "string", "enum": ["Diesel S10", "Gasolina Comum", "Gasolina Aditivada", "Etanol", "GNV", "Arla 32"], "description": "Usual fuel type" },
+        "tankCapacity": { "type": "number", "description": "Tank capacity in liters" },
+        "status": { "type": "string", "enum": ["active", "maintenance", "inactive"], "description": "Operational status" },
+        "notes": { "type": "string", "maxLength": 500, "description": "Observations" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Last updated timestamp" }
+      },
+      "required": ["name", "plate", "model", "provider", "currentOdometer"]
+    },
     "FuelLog": {
       "title": "FuelLog",
       "description": "Fuel expense and refueling record",
@@ -124,6 +145,10 @@
     "/drivers/{driverId}": {
       "schema": "Driver",
       "description": "Collection of all registered drivers for Oscar and Tiago"
+    },
+    "/vehicles/{vehicleId}": {
+      "schema": "Vehicle",
+      "description": "Registered delivery vans (furgonetas) with mileage and fuel history"
     },
     "/fuel_logs/{logId}": {
       "schema": "FuelLog",

@@ -25,11 +25,13 @@ import { FleetView } from './components/FleetView.tsx';
 import { FuelModal } from './components/FuelModal.tsx';
 import { MaintenanceModal } from './components/MaintenanceModal.tsx';
 import { MileageModal } from './components/MileageModal.tsx';
+import { VehicleModal } from './components/VehicleModal.tsx';
 
 import { auth, db, ADMIN_EMAIL } from './lib/firebase.ts';
 import {
   RouteRecord,
   Driver,
+  Vehicle,
   ProviderName,
   CONTRACTUAL_GOAL,
   FuelLog,
@@ -39,6 +41,7 @@ import {
 import {
   subscribeRoutes,
   subscribeDrivers,
+  subscribeVehicles,
   addRoute,
   updateRoute,
   deleteRoute,
@@ -46,6 +49,9 @@ import {
   addDriver,
   updateDriver,
   deleteDriver,
+  addVehicle,
+  updateVehicle,
+  deleteVehicle,
   seedInitialDataIfEmpty,
   subscribeFuelLogs,
   subscribeMaintenanceLogs,
@@ -60,6 +66,7 @@ import {
   updateMileageLog,
   deleteMileageLog,
   seedInitialFleetDataIfEmpty,
+  seedVehiclesIfEmpty,
 } from './services/dataService.ts';
 import { Check, ShieldAlert, Wifi, Sparkles } from 'lucide-react';
 
@@ -68,6 +75,7 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState<boolean>(true); // Default to admin for creator, can toggle
   const [routes, setRoutes] = useState<RouteRecord[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [fuelLogs, setFuelLogs] = useState<FuelLog[]>([]);
   const [maintenanceLogs, setMaintenanceLogs] = useState<MaintenanceLog[]>([]);
   const [mileageLogs, setMileageLogs] = useState<MileageLog[]>([]);
@@ -83,13 +91,17 @@ export default function App() {
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [targetProviderForModal, setTargetProviderForModal] = useState<ProviderName>('Oscar');
 
-  // Fleet Modals state
+  // Fleet & Vehicle Modals state
+  const [vehicleModalOpen, setVehicleModalOpen] = useState(false);
+  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [fuelModalOpen, setFuelModalOpen] = useState(false);
   const [editingFuel, setEditingFuel] = useState<FuelLog | null>(null);
+  const [preselectedVehicleIdForFuel, setPreselectedVehicleIdForFuel] = useState<string | undefined>(undefined);
   const [maintenanceModalOpen, setMaintenanceModalOpen] = useState(false);
   const [editingMaintenance, setEditingMaintenance] = useState<MaintenanceLog | null>(null);
   const [mileageModalOpen, setMileageModalOpen] = useState(false);
   const [editingMileage, setEditingMileage] = useState<MileageLog | null>(null);
+  const [preselectedVehicleIdForMileage, setPreselectedVehicleIdForMileage] = useState<string | undefined>(undefined);
 
   // Toast notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -134,6 +146,7 @@ export default function App() {
         // Seed initial data if empty
         await seedInitialDataIfEmpty();
         await seedInitialFleetDataIfEmpty();
+        await seedVehiclesIfEmpty();
       } catch (err) {
         console.error('Initialization error:', err);
       } finally {
@@ -152,6 +165,10 @@ export default function App() {
       setDrivers(data);
     });
 
+    const unsubVehicles = subscribeVehicles((data) => {
+      setVehicles(data);
+    });
+
     const unsubFuel = subscribeFuelLogs((data) => {
       setFuelLogs(data);
     });
@@ -167,6 +184,7 @@ export default function App() {
     return () => {
       unsubRoutes();
       unsubDrivers();
+      unsubVehicles();
       unsubFuel();
       unsubMaint();
       unsubMileage();
@@ -295,6 +313,29 @@ export default function App() {
     }
   };
 
+  // Vehicle operations
+  const handleSaveVehicle = async (
+    vehicleData: Omit<Vehicle, 'id' | 'createdAt'>,
+    existingId?: string
+  ) => {
+    if (existingId) {
+      await updateVehicle(existingId, vehicleData);
+      showToast(`Furgoneta ${vehicleData.name} atualizada com sucesso!`);
+    } else {
+      await addVehicle(vehicleData);
+      showToast(`Furgoneta ${vehicleData.name} cadastrada com sucesso!`);
+    }
+  };
+
+  const handleDeleteVehicle = async (vehicleId: string) => {
+    try {
+      await deleteVehicle(vehicleId);
+      showToast('Furgoneta excluída com sucesso.');
+    } catch (err: any) {
+      showToast('Erro ao excluir furgoneta.');
+    }
+  };
+
   const oscarRoutesCount = routes.filter((r) => r.provider === 'Oscar').length;
   const tiagoRoutesCount = routes.filter((r) => r.provider === 'Tiago').length;
 
@@ -339,7 +380,7 @@ export default function App() {
         }}
         oscarCount={oscarRoutesCount}
         tiagoCount={tiagoRoutesCount}
-        fleetCount={fuelLogs.length + maintenanceLogs.length + mileageLogs.length}
+        fleetCount={vehicles.length + fuelLogs.length + maintenanceLogs.length + mileageLogs.length}
       />
 
       {/* Main Container */}
@@ -449,9 +490,11 @@ export default function App() {
                 maintenanceLogs={maintenanceLogs}
                 mileageLogs={mileageLogs}
                 drivers={drivers}
+                vehicles={vehicles}
                 isAdmin={isAdmin}
-                onOpenFuelModal={(log) => {
+                onOpenFuelModal={(log, vehId) => {
                   setEditingFuel(log || null);
+                  setPreselectedVehicleIdForFuel(vehId);
                   setFuelModalOpen(true);
                 }}
                 onDeleteFuelLog={handleDeleteFuelLog}
@@ -460,11 +503,17 @@ export default function App() {
                   setMaintenanceModalOpen(true);
                 }}
                 onDeleteMaintenanceLog={handleDeleteMaintenanceLog}
-                onOpenMileageModal={(log) => {
+                onOpenMileageModal={(log, vehId) => {
                   setEditingMileage(log || null);
+                  setPreselectedVehicleIdForMileage(vehId);
                   setMileageModalOpen(true);
                 }}
                 onDeleteMileageLog={handleDeleteMileageLog}
+                onOpenVehicleModal={(veh) => {
+                  setEditingVehicle(veh || null);
+                  setVehicleModalOpen(true);
+                }}
+                onDeleteVehicle={handleDeleteVehicle}
               />
             )}
           </>
@@ -495,16 +544,31 @@ export default function App() {
         defaultProvider={targetProviderForModal}
       />
 
+      <VehicleModal
+        isOpen={vehicleModalOpen}
+        onClose={() => {
+          setVehicleModalOpen(false);
+          setEditingVehicle(null);
+        }}
+        onSave={handleSaveVehicle}
+        editingVehicle={editingVehicle}
+        drivers={drivers}
+        defaultProvider={targetProviderForModal}
+      />
+
       <FuelModal
         isOpen={fuelModalOpen}
         onClose={() => {
           setFuelModalOpen(false);
           setEditingFuel(null);
+          setPreselectedVehicleIdForFuel(undefined);
         }}
         onSave={handleSaveFuelLog}
         editingLog={editingFuel}
         drivers={drivers}
+        vehicles={vehicles}
         defaultProvider={targetProviderForModal}
+        preselectedVehicleId={preselectedVehicleIdForFuel}
       />
 
       <MaintenanceModal
@@ -524,12 +588,16 @@ export default function App() {
         onClose={() => {
           setMileageModalOpen(false);
           setEditingMileage(null);
+          setPreselectedVehicleIdForMileage(undefined);
         }}
         onSave={handleSaveMileageLog}
         editingLog={editingMileage}
         drivers={drivers}
+        vehicles={vehicles}
         routes={routes}
         defaultProvider={targetProviderForModal}
+        preselectedVehicleId={preselectedVehicleIdForMileage}
+        allMileageLogs={mileageLogs}
       />
 
       <ShareLinkModal
